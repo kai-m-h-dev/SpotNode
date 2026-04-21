@@ -1,0 +1,136 @@
+#include <SPI.h>
+#include <Wire.h>
+#include <WiFi.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+// ====== ANPASSEN ======
+const char* WIFI_SSID = "<SSID>";
+const char* WIFI_PASS = "<PASSWORD>";
+const char* SERVER_IP = "<PC IP addr>";
+const uint16_t SERVER_PORT = 4444;
+// ======================
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 32
+#define OLED_RESET -1
+#define SCREEN_ADDRESS 0x3C
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+const int btnNext   = 12;
+const int btnBack   = 14;
+const int btnSelect = 13;
+
+int page = 0;
+const int maxPages = 3;
+const char* pageNames[maxPages] = {"Skip", "Back", "Pause"};
+
+bool lastNext = HIGH;
+bool lastBack = HIGH;
+bool lastSelect = HIGH;
+WiFiClient client;
+unsigned long lastReconnect = 0;
+void drawMenu();
+void action();
+void sendEvent(const String& msg);
+void ensureConnection();
+void setup() {
+  Serial.begin(115200);
+  pinMode(btnNext,   INPUT_PULLUP);
+  pinMode(btnBack,   INPUT_PULLUP);
+  pinMode(btnSelect, INPUT_PULLUP);
+  Wire.begin(21, 22);
+  delay(100);
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println("OLED FAIL");
+    while (1);
+  }
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("WiFi...");
+  display.display();
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+    delay(250);
+    Serial.print(".");
+  }
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println();
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
+    display.println("WiFi OK");
+    display.println(WiFi.localIP());
+  } else {
+    display.println("WiFi FAIL");
+  }
+  display.display();
+  delay(800);
+  ensureConnection();
+  drawMenu();
+}
+void loop() {
+  ensureConnection();
+  bool n = digitalRead(btnNext);
+  bool b = digitalRead(btnBack);
+  bool s = digitalRead(btnSelect);
+  if (lastNext == HIGH && n == LOW) {
+    page = (page + 1) % maxPages;
+    sendEvent("BTN:NEXT");
+    drawMenu();
+    delay(150);
+  }
+  if (lastBack == HIGH && b == LOW) {
+    page = (page - 1 + maxPages) % maxPages;
+    sendEvent("BTN:BACK");
+    drawMenu();
+    delay(150);
+  }
+  if (lastSelect == HIGH && s == LOW) {
+    String label = String("BTN:SELECT:") + pageNames[page];
+    sendEvent(label);
+    action();
+    delay(150);
+  }
+  lastNext = n;
+  lastBack = b;
+  lastSelect = s;
+}
+void ensureConnection() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (client.connected()) return;
+  if (millis() - lastReconnect < 2000) return;
+  lastReconnect = millis();
+  Serial.print("Connecting to server... ");
+  if (client.connect(SERVER_IP, SERVER_PORT)) {
+    Serial.println("OK");
+    client.println("HELLO:ESP32");
+  } else {
+    Serial.println("FAIL");
+  }
+}
+void sendEvent(const String& msg) {
+  Serial.println(msg);
+  if (client.connected()) {
+    client.println(msg);
+  }
+}
+void drawMenu() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  for (int i = 0; i < maxPages; i++) {
+    display.println(String(i == page ? "> " : "  ") + pageNames[i]);
+  }
+  display.display();
+}
+void action() {
+  display.fillRect(0, 24, 128, 8, SSD1306_BLACK);
+  display.setCursor(0, 24);
+  display.print(String(pageNames[page]) + " OK");
+  display.display();
+}
