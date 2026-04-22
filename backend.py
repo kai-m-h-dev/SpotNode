@@ -44,7 +44,7 @@ def toggle_pause():
     except Exception as e:
         print(f"[Spotify] Pause error: {e}")
 #// ====== ANPASSEN ======
-SOCKET_HOST = "192.168.0.95"
+SOCKET_HOST = "<IP_ADDR>"
 SOCKET_PORT = 4444
 #// ======================
 def handle_event(msg: str):
